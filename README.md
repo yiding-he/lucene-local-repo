@@ -6,6 +6,10 @@ lucene-local-repo 对于文本内容封装为 Text 对象，该对象只包含 i
 
 注意，Lucene 索引并不适合直接当数据库用。
 
+### 添加依赖
+
+本项目只有很少的几个类，就不发布到 maven central 了，请自行 clone 到本地并执行 `mvn install` 安装。
+
 ### 创建
 
 ```java
