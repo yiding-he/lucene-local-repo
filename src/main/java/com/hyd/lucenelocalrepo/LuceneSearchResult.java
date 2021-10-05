@@ -5,6 +5,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -61,6 +62,24 @@ public class LuceneSearchResult {
         Page nextPage = continueSearch.apply(scoreDocs[scoreDocs.length - 1]);
         return new LuceneSearchResult(nextPage, continueSearch);
       }
+    }
+  }
+
+  public long getCount() {
+    if (this.page == null || this.page.topDocs == null) {
+      return 0;
+    }
+    return this.page.topDocs.totalHits.value;
+  }
+
+  /**
+   * 遍历所有查询结果，自动翻页
+   */
+  public void allForEach(Consumer<Document> consumer) {
+    LuceneSearchResult result = this;
+    while (result.hasData()) {
+      result.getDocuments().forEach(consumer);
+      result = result.nextPage();
     }
   }
 }

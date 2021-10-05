@@ -1,46 +1,114 @@
 package com.hyd.lucenelocalrepo;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LongPoint;
-import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.IndexableField;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Paths;
-
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author yiding_he
  */
 class LuceneRepositoryTest {
 
-  @Test
-  public void testCreateRepository() throws Exception {
-    LuceneRepository repository = LuceneRepository.builder()
+  private static List<String> lines;
+
+  private LuceneRepository luceneRepository;
+
+  @BeforeAll
+  public static void beforeAll() throws Exception {
+    URL resource = LuceneRepositoryTest.class.getResource("/sample.txt");
+    if (resource == null) {
+      throw new IllegalStateException("Cannot read sample.txt");
+    }
+    lines = Files.lines(Paths.get(resource.toURI())).collect(Collectors.toList());
+  }
+
+  @BeforeEach
+  public void BeforeEach() throws Exception {
+    FileUtils.deleteDirectory(new File("target/index"));
+    luceneRepository = LuceneRepository.builder()
       .path(Paths.get("target/index"))
       .analyzer(JcsegAnalyzerBuilder.build())
       .build();
 
-    repository.close();
+    List<Text> textList = new ArrayList<>();
+    for (int i = 0; i < lines.size(); i++) {
+      String line = lines.get(i);
+      Text text = new Text(i, line);
+      textList.add(text);
+    }
+
+    luceneRepository.addContents(textList);
   }
+
+  @AfterEach
+  public void afterEach() {
+    if (luceneRepository != null) {
+      luceneRepository.close();
+    }
+  }
+
+  private void outputDocument(Document doc) {
+    if (doc == null) {
+      System.out.println("(doc is null)");
+      return;
+    }
+    IndexableField idField = doc.getField("id");
+    if (idField == null) {
+      System.out.println("(field 'id' not found)");
+      return;
+    }
+    int id = idField.numericValue().intValue();
+    System.out.println("id = " + id);
+    System.out.println("content = " + StringUtils.abbreviate(lines.get(id), 30));
+  }
+
+  //////////////////////////////////////////////////////////////
 
   @Test
   public void testQuery() throws Exception {
-    LuceneRepository repository = LuceneRepository.builder()
-      .path(Paths.get("target/index"))
-      .analyzer(JcsegAnalyzerBuilder.build())
-      .build();
+    LuceneSearchResult result = luceneRepository.searchByContent(10, "中国", "评级"); // 每页10条
+    System.out.println("count = " + result.getCount());
+    result.allForEach(this::outputDocument);
+  }
 
-    Document document = new Document();
-    document.add(new LongPoint("id", 1L));
-    document.add(new TextField("content", "张三是一个好人", Field.Store.YES));
-    repository.addDocument(document);
+  @Test
+  public void testQueryMultiPage() throws Exception {
+    LuceneSearchResult result = luceneRepository.searchByContent(10, "中国"); // 每页10条
+    System.out.println("count = " + result.getCount());
+    result.allForEach(this::outputDocument);
+  }
 
-    LuceneSearchResult result = repository.searchDocument("content", "好人", 10);
-    while (result.hasData()) {
-      result.getDocuments().forEach(doc -> System.out.println(doc.getField("content").stringValue()));
-      result = result.nextPage();
-    }
+  @Test
+  public void testQueryPhrase() throws Exception {
+    LuceneSearchResult result = luceneRepository.search(10, "中国 +评级"); // 每页10条
+    System.out.println("count = " + result.getCount());
+    result.allForEach(this::outputDocument);
+  }
+
+  @Test
+  public void testFindById() throws Exception {
+    Document doc = luceneRepository.findById(1);
+    outputDocument(doc);
+  }
+
+  @Test
+  public void testDeleteById() throws Exception {
+    luceneRepository.deleteById(1);
+
+    LuceneSearchResult result = luceneRepository.searchByContent(10, "瑞银");
+    result.allForEach(this::outputDocument);
   }
 }
